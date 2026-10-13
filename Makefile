@@ -1,6 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -g
-TARGET = bin/lsv1.0.0
+
+TARGET = bin/ls
 SOURCE = src/ls-v1.0.0.c
 OBJECT = obj/ls-v1.0.0.o
 
