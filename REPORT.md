@@ -186,3 +186,38 @@ value, zero, or a positive value depending on their order. The
 `const` qualifier means the comparison function does not modify the
 elements being compared.
 
+
+## Feature 6: Colorized Output (v1.5.0)
+
+**Branch:** `feature-colorized-output-v1.5.0`
+
+### Implementation
+
+The program uses ANSI escape codes to color filenames according to
+their file types. Directories are blue, executable files are green,
+.tar/.gz/.zip archives are red, symbolic links are pink/magenta,
+and special files use reverse video.
+
+The implementation uses `lstat()` to identify symbolic links and
+retrieve metadata. Executable status is determined by checking the
+owner, group, and other execute bits. The terminal color is reset
+after a colored filename is printed.
+
+### Report Questions
+
+**1. How do ANSI escape codes produce color? Show the sequence for green text.**
+
+ANSI escape sequences are special control codes interpreted by the
+terminal to change text attributes. The sequence `\033[0;32m`
+sets the foreground color to green, and `\033[0m` resets the
+terminal to its default formatting. For example:
+`printf("\033[0;32mHello\033[0m\n");`
+
+**2. Which permission bits determine whether a file is executable?**
+
+The `st_mode` field contains the execute permission bits
+`S_IXUSR`, `S_IXGRP`, and `S_IXOTH`. They represent execute
+permission for the owner, group, and other users respectively.
+Checking `mode & (S_IXUSR | S_IXGRP | S_IXOTH)` determines
+whether at least one execute permission bit is set.
+
