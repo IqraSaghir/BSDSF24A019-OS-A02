@@ -144,3 +144,45 @@ After collecting filenames, the program calls the long-listing
 function logic for `-l`, the horizontal printer for `-x`, or the
 down-then-across printer when neither option is selected.
 
+
+## Feature 5: Alphabetical Sort (v1.4.0)
+
+**Branch:** `feature-alphabetical-sort-v1.4.0`
+
+### Implementation
+
+The program now sorts collected directory entries using the standard
+C library function `qsort()` before displaying them. The comparison
+function receives two `const void *` arguments, treats them as
+pointers to filename strings, and uses `strcmp()` to determine their
+alphabetical order.
+
+Sorting is performed before selecting the display logic. Therefore,
+the default down-then-across mode, the `-x` horizontal mode, and the
+`-l` long-listing mode all use the sorted array.
+
+### Report Questions
+
+**1. Why must directory entries be collected before sorting? What are
+the drawbacks for directories containing millions of files?**
+
+Sorting requires access to the collection of filenames being sorted.
+The program first reads all visible directory entries into a dynamic
+array and then sorts that array. For a directory containing millions
+of files, this approach can consume substantial memory, require
+additional allocation time, and make sorting slower. Allocation can
+also fail if sufficient memory is unavailable.
+
+**2. Explain the purpose and signature of the qsort() comparison
+function. Why does it take const void * arguments?**
+
+The comparison function tells `qsort()` how to compare two array
+elements. Its signature is `int compare_names(const void *a,
+const void *b)`. The generic `const void *` parameters allow `qsort()`
+to work with arrays of different data types. The comparison function
+casts or interprets these pointers according to the actual element
+type, compares the strings using `strcmp()`, and returns a negative
+value, zero, or a positive value depending on their order. The
+`const` qualifier means the comparison function does not modify the
+elements being compared.
+
