@@ -28,6 +28,15 @@ typedef struct {
 static int long_format = 0;
 static int horizontal_format = 0;
 
+/* Compare two filename strings for alphabetical sorting. */
+static int compare_names(const void *a, const void *b)
+{
+    const char *left = *(char * const *)a;
+    const char *right = *(char * const *)b;
+
+    return strcmp(left, right);
+}
+
 static void free_names(NameList *list)
 {
     for (size_t i = 0; i < list->count; i++)
@@ -294,6 +303,9 @@ static void do_ls(const char *directory)
         errno = read_error;
         perror("readdir");
     }
+
+    /* Sort all collected filenames before displaying them. */
+    qsort(names.items, names.count, sizeof(names.items[0]), compare_names);
 
     if (long_format) {
         long long total_blocks = 0;
