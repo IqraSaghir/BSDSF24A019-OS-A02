@@ -98,6 +98,68 @@ static char *join_path(const char *directory, const char *name)
     return path;
 }
 
+
+static int ends_with(const char *name, const char *suffix)
+{
+    size_t n = strlen(name);
+    size_t s = strlen(suffix);
+    return n >= s && strcmp(name + n - s, suffix) == 0;
+}
+
+static const char *file_color(const char *name, mode_t mode)
+{
+    if (S_ISLNK(mode))
+        return "\033[0;35m";  /* Pink/magenta */
+
+    if (S_ISDIR(mode))
+        return "\033[0;34m";  /* Blue */
+
+    if (S_ISFIFO(mode) || S_ISCHR(mode) ||
+        S_ISBLK(mode) || S_ISSOCK(mode))
+        return "\033[7m";     /* Reverse video */
+
+    if (ends_with(name, ".tar") ||
+        ends_with(name, ".gz") ||
+        ends_with(name, ".zip"))
+        return "\033[0;31m";  /* Red */
+
+    if (mode & (S_IXUSR | S_IXGRP | S_IXOTH))
+        return "\033[0;32m";  /* Green */
+
+    return "";
+}
+
+static void print_colored_name(const char *path, const char *name)
+{
+    struct stat info;
+
+    if (lstat(path, &info) != 0) {
+        printf("%s", name);
+        return;
+    }
+
+    const char *color = file_color(name, info.st_mode);
+
+    if (*color)
+        printf("%s%s\033[0m", color, name);
+    else
+        printf("%s", name);
+}
+
+static void print_padded_name(const char *path, const char *name,
+                              size_t width, int pad)
+{
+    print_colored_name(path, name);
+
+    if (pad) {
+        size_t length = strlen(name);
+        while (length < width) {
+            putchar(' ');
+            length++;
+        }
+    }
+}
+
 static void format_permissions(mode_t mode, char text[11])
 {
     if (S_ISREG(mode))      text[0] = '-';
@@ -133,6 +195,7 @@ static void format_permissions(mode_t mode, char text[11])
     text[10] = '\0';
 }
 
+
 static void print_long_entry(const char *path, const char *name)
 {
     struct stat info;
@@ -151,20 +214,20 @@ static void print_long_entry(const char *path, const char *name)
     struct group *group = getgrgid(info.st_gid);
     char *time_text = ctime(&info.st_mtime);
 
-    if (time_text != NULL)
-        snprintf(date_text, sizeof(date_text), "%.12s",
-                 time_text + 4);
+    if (time_text)
+        snprintf(date_text, sizeof(date_text), "%.12s", time_text + 4);
     else
         snprintf(date_text, sizeof(date_text), "unknown time");
 
-    printf("%s %2lu %-8s %-8s %8lld %s %s",
+    printf("%s %2lu %-8s %-8s %8lld %s ",
            permissions,
            (unsigned long)info.st_nlink,
            user ? user->pw_name : "?",
            group ? group->gr_name : "?",
            (long long)info.st_size,
-           date_text,
-           name);
+           date_text);
+
+    print_colored_name(path, name);
 
     if (S_ISLNK(info.st_mode)) {
         char target[PATH_MAX + 1];
@@ -179,6 +242,7 @@ static void print_long_entry(const char *path, const char *name)
     putchar('\n');
 }
 
+
 static unsigned int terminal_width(void)
 {
     struct winsize window;
@@ -192,7 +256,8 @@ static unsigned int terminal_width(void)
 }
 
 /* Default mode: print down each column, then across. */
-static void print_columns(const NameList *list)
+
+static void print_columns(const NameList *list, const char *directory)
 {
     if (list->count == 0)
         return;
@@ -202,7 +267,6 @@ static void print_columns(const NameList *list)
 
     if (columns < 1)
         columns = 1;
-
     if (columns > list->count)
         columns = list->count;
 
@@ -216,19 +280,27 @@ static void print_columns(const NameList *list)
             if (index >= list->count)
                 break;
 
-            if (index + rows < list->count)
-                printf("%-*s", (int)cell_width,
-                       list->items[index]);
-            else
+            int has_next = col + 1 < columns &&
+                           row + (col + 1) * rows < list->count;
+
+            char *path = join_path(directory, list->items[index]);
+
+            if (path) {
+                print_padded_name(path, list->items[index],
+                                  cell_width, has_next);
+                free(path);
+            } else {
                 printf("%s", list->items[index]);
+            }
         }
 
         putchar('\n');
     }
 }
 
-/* -x mode: print left to right, then wrap to the next row. */
-static void print_horizontal(const NameList *list)
+
+
+static void print_horizontal(const NameList *list, const char *directory)
 {
     if (list->count == 0)
         return;
@@ -238,7 +310,6 @@ static void print_horizontal(const NameList *list)
 
     if (columns < 1)
         columns = 1;
-
     if (columns > list->count)
         columns = list->count;
 
@@ -246,12 +317,21 @@ static void print_horizontal(const NameList *list)
         int end_of_row = ((i + 1) % columns == 0) ||
                          (i + 1 == list->count);
 
+        char *path = join_path(directory, list->items[i]);
+
+        if (path) {
+            print_padded_name(path, list->items[i],
+                              cell_width, !end_of_row);
+            free(path);
+        } else {
+            printf("%s", list->items[i]);
+        }
+
         if (end_of_row)
-            printf("%s\n", list->items[i]);
-        else
-            printf("%-*s", (int)cell_width, list->items[i]);
+            putchar('\n');
     }
 }
+
 
 static void do_ls(const char *directory)
 {
@@ -260,8 +340,10 @@ static void do_ls(const char *directory)
     if (stat(directory, &info) == 0 && !S_ISDIR(info.st_mode)) {
         if (long_format)
             print_long_entry(directory, directory);
-        else
-            printf("%s\n", directory);
+        else {
+            print_colored_name(directory, directory);
+            putchar('\n');
+        }
 
         return;
     }
@@ -336,9 +418,9 @@ static void do_ls(const char *directory)
             free(path);
         }
     } else if (horizontal_format) {
-        print_horizontal(&names);
+        print_horizontal(&names, directory);
     } else {
-        print_columns(&names);
+        print_columns(&names, directory);
     }
 
     free_names(&names);
