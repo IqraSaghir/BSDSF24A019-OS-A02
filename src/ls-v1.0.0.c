@@ -27,6 +27,7 @@ typedef struct {
 
 static int long_format = 0;
 static int horizontal_format = 0;
+static int recursive_format = 0;
 
 /* Compare two filename strings for alphabetical sorting. */
 static int compare_names(const void *a, const void *b)
@@ -423,6 +424,28 @@ static void do_ls(const char *directory)
         print_columns(&names, directory);
     }
 
+
+    if (recursive_format) {
+        for (size_t i = 0; i < names.count; i++) {
+            char *child_path = join_path(directory, names.items[i]);
+
+            if (child_path == NULL) {
+                fprintf(stderr, "Not enough memory for child path\n");
+                continue;
+            }
+
+            struct stat child_info;
+
+            if (lstat(child_path, &child_info) == 0 &&
+                S_ISDIR(child_info.st_mode)) {
+                printf("\n%s:\n", child_path);
+                do_ls(child_path);
+            }
+
+            free(child_path);
+        }
+    }
+
     free_names(&names);
 }
 
@@ -430,7 +453,7 @@ int main(int argc, char *argv[])
 {
     int option;
 
-    while ((option = getopt(argc, argv, "lx")) != -1) {
+    while ((option = getopt(argc, argv, "lxR")) != -1) {
         switch (option) {
             case 'l':
                 long_format = 1;
@@ -442,8 +465,12 @@ int main(int argc, char *argv[])
                 long_format = 0;
                 break;
 
+            case 'R':
+                recursive_format = 1;
+                break;
+
             default:
-                fprintf(stderr, "Usage: %s [-l | -x] [file/directory ...]\n",
+                fprintf(stderr, "Usage: %s [-l] [-x] [-R] [file/directory ...]\n",
                         argv[0]);
                 return EXIT_FAILURE;
         }
@@ -452,12 +479,14 @@ int main(int argc, char *argv[])
     int count = argc - optind;
 
     if (count == 0) {
+        if (recursive_format)
+            printf(".:\n");
         do_ls(".");
         return EXIT_SUCCESS;
     }
 
     for (int i = optind; i < argc; i++) {
-        if (count > 1)
+        if (count > 1 || recursive_format)
             printf("%s:\n", argv[i]);
         else if (!long_format)
             printf("Directory listing of %s:\n", argv[i]);
