@@ -65,3 +65,82 @@ Similar masks exist for the group and other users. Special bits such
 as `S_ISUID`, `S_ISGID`, and `S_ISVTX` are checked separately so the
 permission string can display `s`, `S`, `t`, or `T` where appropriate.
 
+
+## Feature 3: Column Display (v1.2.0)
+
+**Branch:** `feature-column-display-v1.2.0`
+
+### Implementation
+
+The default directory listing now gathers visible filenames into a
+dynamically allocated array before printing them. While collecting
+entries, the program tracks the longest filename.
+
+The terminal width is obtained using `ioctl()` with `TIOCGWINSZ`.
+When terminal-width detection is unavailable, the program falls back
+to 80 columns. The number of columns and rows is calculated from the
+terminal width and the maximum filename length, with spacing between
+columns.
+
+The output is printed down each column and then across the row. The
+`-l` long-listing mode from Feature 2 remains available.
+
+### Report Questions
+
+**1. Explain down-then-across printing. Why is one simple loop
+insufficient?**
+
+The program first collects the filenames and calculates the number
+of rows. It then prints an item from each column for a row. The
+index for a column is calculated as row + column * number_of_rows.
+A single loop in directory-reading order would print entries one
+after another and would not arrange them in the required column order.
+
+**2. What is ioctl() used for, and what are the limitations of a
+fixed-width fallback?**
+
+The `ioctl()` call with `TIOCGWINSZ` obtains the current terminal
+width so the program can choose a suitable number of columns.
+A fixed width such as 80 characters may waste space on a wider
+terminal or cause wrapping and poor alignment on a narrower one.
+The fallback is useful when terminal-size detection is unavailable,
+but it cannot adapt to the actual terminal dimensions.
+
+
+## Feature 4: Horizontal Column Display (v1.3.0)
+
+**Branch:** `feature-horizontal-display-v1.3.0`
+
+**Option:** `-x`
+
+### Implementation
+
+The program now supports the `-x` option through `getopt()`.
+The horizontal display function calculates a column width based on
+the longest filename and determines how many entries can fit across
+the terminal. It prints filenames in their original collection order
+from left to right, wrapping to a new line when the row is full.
+
+The default mode continues to display entries in down-then-across
+columns, and the `-l` mode continues to print the long listing.
+
+### Report Questions
+
+**1. Compare down-then-across and across printing. Which needs
+more pre-calculation, and why?**
+
+Down-then-across printing requires more pre-calculation because the
+program must determine the row count and map each row and column to
+the correct filename index. Horizontal printing is simpler because
+it can process filenames sequentially and move to the next line after
+the current row reaches its available width.
+
+**2. How are the -l, -x and default display modes managed?**
+
+The program uses two state flags, `long_format` and
+`horizontal_format`. The `getopt()` loop sets the corresponding flag
+when it encounters `-l` or `-x` and clears the competing flag.
+After collecting filenames, the program calls the long-listing
+function logic for `-l`, the horizontal printer for `-x`, or the
+down-then-across printer when neither option is selected.
+
