@@ -221,3 +221,41 @@ permission for the owner, group, and other users respectively.
 Checking `mode & (S_IXUSR | S_IXGRP | S_IXOTH)` determines
 whether at least one execute permission bit is set.
 
+
+## Feature 7: Recursive Listing (v1.6.0)
+
+**Branch:** `feature-recursive-listing-v1.6.0`
+
+**Option:** `-R`
+
+### Implementation
+
+The program supports recursive directory listing using the `-R`
+option. It prints directory headers, displays sorted entries, and
+visits nested directories recursively.
+
+The program constructs the full path for each entry, then uses
+`lstat()` and `S_ISDIR()` to identify actual directories before
+calling the listing function recursively. Symbolic links to
+directories are not followed. Existing sorting, long listing,
+horizontal display, and colorized output are retained.
+
+### Report Questions
+
+**1. What is a base case in recursive listing?**
+
+A base case is the condition that stops further recursive calls.
+In this program, recursion continues only for entries identified
+as actual directories. Regular files and symbolic links do not
+trigger recursive calls. Hidden entries such as `.` and `..` are
+skipped. When a directory has no child directories, that branch
+of the traversal ends.
+
+**2. Why must the program construct a full path before recursion?**
+
+A full path identifies a child directory relative to its parent,
+for example `parent_dir/subdir`. Passing this full path ensures
+that the recursive call opens the intended directory. Passing
+only `subdir` could make the program look relative to the process's
+current working directory rather than the intended parent.
+
